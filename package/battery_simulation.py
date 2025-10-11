@@ -74,7 +74,11 @@ def run_pv_battery_simulation(
         df.set_index("time", inplace=True)
 
     # Scale consumption
-    df["consumption_kW"] = df["consumption_kW_normed"] * 5*consumption_per_flat_per_year_kWh
+    df["consumption_kW"] = \
+        df["consumption_kW_normed"] + np.roll(df["consumption_kW_normed"], 1) + np.roll(df["consumption_kW_normed"], 2) \
+        + np.roll(df["consumption_kW_normed"], 7) + np.roll(df["consumption_kW_normed"], -6)
+    
+    df["consumption_kW"] *= consumption_per_flat_per_year_kWh
     df["PV_total_kW"] = installed_power_oso_kWp*df["P_oso"]*1e-3 + installed_power_wnw_kWp*df["P_wnw"]*1e-3
 
     # Battery simulation
