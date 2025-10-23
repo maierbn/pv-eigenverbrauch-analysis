@@ -12,6 +12,7 @@ def run_pv_battery_simulation(
     battery_capacity_kWh=20,
     battery_discharge_cutoff_limit=0.1,
     battery_charge_efficiency=0.95,
+    battery_max_power_kW=4.2,
     enable_plots=True
 ):
     global df
@@ -81,7 +82,7 @@ def run_pv_battery_simulation(
     df["consumption_kW"] *= consumption_per_flat_per_year_kWh
     df["PV_total_kW"] = installed_power_oso_kWp*df["P_oso"]*1e-3 + installed_power_wnw_kWp*df["P_wnw"]*1e-3
 
-    # Battery simulation
+    # Battery simulation with power limit
     soc = battery_capacity_kWh/2
     soc_list = []
     grid_list = []
@@ -91,17 +92,28 @@ def run_pv_battery_simulation(
     for idx, row in df.iterrows():
         pv_surplus = row["PV_total_kW"] - row["consumption_kW"]
         if pv_surplus > 0:
-            charge_possible = min(pv_surplus * battery_charge_efficiency, battery_capacity_kWh - soc)
+            # Charging: limited by efficiency, capacity, and max power
+            charge_possible = min(
+                pv_surplus * battery_charge_efficiency, 
+                battery_capacity_kWh - soc,
+                battery_max_power_kW  # Power limit
+            )
             soc += charge_possible
             grid = 0
             battery_charge = charge_possible
             battery_discharge = 0
         else:
-            discharge_possible = min(-pv_surplus, soc - battery_capacity_kWh * battery_discharge_cutoff_limit)
+            # Discharging: limited by available energy, cutoff limit, and max power
+            discharge_possible = min(
+                -pv_surplus, 
+                soc - battery_capacity_kWh * battery_discharge_cutoff_limit,
+                battery_max_power_kW  # Power limit
+            )
             soc -= discharge_possible
             grid = -pv_surplus - discharge_possible if discharge_possible < -pv_surplus else 0
             battery_charge = 0
             battery_discharge = discharge_possible
+        
         soc_list.append(soc)
         grid_list.append(grid)
         battery_charge_list.append(battery_charge)
@@ -111,6 +123,8 @@ def run_pv_battery_simulation(
     df["from_grid_kW"] = grid_list
     df["battery_charge_kWh"] = battery_charge_list
     df["battery_discharge_kWh"] = battery_discharge_list
+
+    #df.to_parquet("data/pv_battery_simulation_results.parquet", index=True)
 
     # Annual stats
     annual_stats = df.copy().groupby('year').agg({
