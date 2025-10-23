@@ -136,6 +136,68 @@ def run_pv_battery_simulation(
     print(f"Average grid independence rate: {avg_grid_independence:.1f}%")
     print(f"Average PV self-consumption rate: {avg_self_consumption_rate:.1f}%")
 
+    # Calculate hourly averages by month
+    df_hourly = df.copy()
+    df_hourly['month'] = df_hourly.index.month
+    df_hourly['hour'] = df_hourly.index.hour
+
+    # Group months into pairs (Jan-Feb, Mar-Apr, etc.)
+    df_hourly['month_pair'] = ((df_hourly['month'] - 1) // 2) + 1
+
+    hourly_by_month = df_hourly.groupby(['month_pair', 'hour']).agg({
+        'PV_total_kW': 'mean',
+        'consumption_kW': 'mean',
+        'battery_charge_kWh': 'mean',
+        'battery_discharge_kWh': 'mean'
+    }).reset_index()
+
+    month_pairs = ['Jan-Feb', 'Mar-Apr', 'May-Jun', 'Jul-Aug', 'Sep-Oct', 'Nov-Dec']
+    # Use a cold-to-warm colormap (blue to red)
+    colors = plt.cm.coolwarm(np.linspace(0, 1, 6))
+
+    # Create subplots
+    fig, axes = plt.subplots(3, 1, figsize=(14, 12))
+
+    # Plot 1: PV Production
+    for month_pair in range(1, 7):
+        month_data = hourly_by_month[hourly_by_month['month_pair'] == month_pair]
+        axes[0].plot(month_data['hour'], month_data['PV_total_kW'], 
+                    label=month_pairs[month_pair-1], color=colors[month_pair-1], linewidth=2.5)
+    axes[0].set_ylabel('Average PV Production (kW)', fontsize=11)
+    axes[0].set_title('Average PV Production by Time of Day for Each Month Pair (2005-2023)', fontsize=13)
+    axes[0].set_xticks(range(0, 24, 2))
+    axes[0].legend(loc='upper right', ncol=2, fontsize=10)
+    axes[0].grid(True, alpha=0.3)
+
+    # Plot 2: Consumption
+    for month_pair in range(1, 7):
+        month_data = hourly_by_month[hourly_by_month['month_pair'] == month_pair]
+        axes[1].plot(month_data['hour'], month_data['consumption_kW'], 
+                    label=month_pairs[month_pair-1], color=colors[month_pair-1], linewidth=2.5)
+    axes[1].set_ylabel('Average Consumption (kW)', fontsize=11)
+    axes[1].set_title('Average Consumption by Time of Day for Each Month Pair (2005-2023)', fontsize=13)
+    axes[1].set_xticks(range(0, 24, 2))
+    axes[1].legend(loc='upper right', ncol=2, fontsize=10)
+    axes[1].grid(True, alpha=0.3)
+
+    # Plot 3: Battery Charge/Discharge
+    for month_pair in range(1, 7):
+        month_data = hourly_by_month[hourly_by_month['month_pair'] == month_pair]
+        # Positive values for charge, negative for discharge
+        net_battery = month_data['battery_charge_kWh'] - month_data['battery_discharge_kWh']
+        axes[2].plot(month_data['hour'], net_battery, 
+                    label=month_pairs[month_pair-1], color=colors[month_pair-1], linewidth=2.5)
+    axes[2].axhline(y=0, color='black', linestyle='--', linewidth=1, alpha=0.5)
+    axes[2].set_xlabel('Hour of Day', fontsize=11)
+    axes[2].set_ylabel('Net Battery Flow (kWh)\n(+Charge, -Discharge)', fontsize=11)
+    axes[2].set_title('Average Battery Charge/Discharge by Time of Day for Each Month Pair (2005-2023)', fontsize=13)
+    axes[2].set_xticks(range(0, 24, 2))
+    axes[2].legend(loc='upper right', ncol=2, fontsize=10)
+    axes[2].grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.show()
+
     # Monthly PV output vs unused PV
     monthly_data = df.copy().groupby(['year', 'month']).agg({
         'PV_total_kW': 'sum',
